@@ -46,6 +46,18 @@ Aplikasi absensi berbasis web dengan dashboard admin ber-UI **AdminLTE 4**, hala
 - Aplikasi ini dirancang untuk lokal; hosting bisa dipasangi nanti.
 - Status login disimpan di memory session Express (restart server mereset login).
 
+## Screenshot
+
+Tidak ada screenshot di repositori ini (generate screenshot tidak tersedia: kredit image kosong). Jalankan aplikasi lokal:
+
+```bash
+npm start
+```
+
+Buka halaman terkait untuk melihat layar aslinya:
+- Dashboard admin: **http://localhost:3000/admin** (login admin)
+- Rekap absen pegawai: **http://localhost:3000/pegawai** (login pegawai / isi absen)
+
 ## Troubleshooting
 
 - `ECONNREFUSED` → MySQL belum jalan: mulai layanan MySQL (port 3306) sebelum `npm run db:init` / `npm start`.
