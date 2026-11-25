@@ -71,6 +71,34 @@
         </div>
       </div>
     </section>
+
+    <section class="card shadow">
+      <div class="card-header bg-primary text-white"><h5 class="mb-0">Manajemen User</h5></div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover" id="tabelUsers">
+            <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Dibuat</th><th>Aksi</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer">
+        <form class="row g-2 align-items-end" id="formTambahUser" onsubmit="return false;">
+          <div class="col-md-2"><input type="text" class="form-control" id="usernameTambah" placeholder="Username"></div>
+          <div class="col-md-2"><input type="password" class="form-control" id="passwordTambah" placeholder="Password"></div>
+          <div class="col-md-2"><select class="form-select" id="roleTambah"><option>admin</option><option>pegawai</option></select></div>
+          <div class="col-auto"><button type="submit" class="btn btn-primary">Tambah</button></div>
+        </form>
+        <form class="row g-2 align-items-end mt-3" id="formEditUser" onsubmit="return false;">
+          <input type="hidden" id="editUserId">
+          <div class="col-md-2"><input type="text" class="form-control" id="usernameEdit" placeholder="Username"></div>
+          <div class="col-md-2"><input type="password" class="form-control" id="passwordEdit" placeholder="Password (kosongkan jika tidak ubah)"></div>
+          <div class="col-md-2"><select class="form-select" id="roleEdit"><option>admin</option><option>pegawai</option></select></div>
+          <div class="col-auto"><button type="submit" class="btn btn-success">Simpan</button>
+            <button type="button" class="btn btn-outline-danger" id="hapusUserBtn">Hapus</button></div>
+        </form>
+      </div>
+    </section>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -165,8 +193,48 @@
       if (e.target.classList.contains('hapusBtn')) onHapus(e.target.dataset.id);
       else if (e.target.classList.contains('editBtn')) onEdit(e);
     });
+    async function loadUsers() {
+      const data = await api('/api/users');
+      document.querySelector('#tabelUsers tbody').innerHTML = data.map(u => `<tr><td>${u.id}</td><td>${u.username}</td><td>${u.role}</td><td>${u.created_at}</td>
+        <td><button class="btn btn-sm btn-outline-warning editUserBtn" data-id="${u.id}">Edit</button>
+            <button class="btn btn-sm btn-outline-danger hapusUserBtn" data-id="${u.id}">Hapus</button></td></tr>`).join('');
+    }
+    function onTambahUser(e) {
+      api('/api/users/tambah', { method: 'POST', body: new URLSearchParams({ username: document.getElementById('usernameTambah').value, password: document.getElementById('passwordTambah').value, role: document.getElementById('roleTambah').value }) })
+        .then(() => { document.getElementById('formTambahUser').reset(); loadUsers(); });
+    }
+    async function onEditUserBtn(e) {
+      const id = e.target.dataset.id;
+      const data = await api('/api/users');
+      const u = data.find(x => String(x.id) === String(id));
+      document.getElementById('editUserId').value = id;
+      document.getElementById('usernameEdit').value = u.username;
+      document.getElementById('roleEdit').value = u.role;
+    }
+    async function simpanUserEdit(e) {
+      e.preventDefault();
+      await api('/api/users/edit/' + document.getElementById('editUserId').value, { method: 'POST', body: new URLSearchParams({
+        username: document.getElementById('usernameEdit').value,
+        password: document.getElementById('passwordEdit').value,
+        role: document.getElementById('roleEdit').value,
+      }) });
+      document.getElementById('formEditUser').reset();
+      loadUsers();
+    }
+    function onHapusUser(e) {
+      const id = e.target.dataset.id;
+      if (confirm('Hapus user ini?')) api('/api/users/hapus/' + id, { method: 'POST' }).then(() => loadUsers());
+    }
+
+    document.getElementById('formTambahUser').addEventListener('submit', onTambahUser);
+    document.getElementById('formEditUser').addEventListener('submit', simpanUserEdit);
+    document.querySelector('#tabelUsers').addEventListener('click', (e) => {
+      if (e.target.classList.contains('editUserBtn')) onEditUserBtn(e);
+      else if (e.target.classList.contains('hapusUserBtn')) onHapusUser(e);
+    });
     setDariSampaiBulanIni();
     loadRingkasan();
+    loadUsers();
   </script>
 </body>
 </html>

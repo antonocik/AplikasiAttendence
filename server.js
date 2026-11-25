@@ -3,7 +3,7 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const db = require('./db');
-const { verifyPassword } = require('./lib/hash');
+const { verifyPassword, hashPassword } = require('./lib/hash');
 
 const PORT = Number(process.env.PORT || 3000);
 const VIEWS_DIR = path.join(__dirname, 'views');
@@ -49,14 +49,75 @@ app.get('/logout', (req, res) => {
 
 function requireAdmin(req, res, next) {
   if (!req.session.user_id || req.session.role !== 'admin') {
-    return res.redirect('/pegawai');
+    if (req.path.startsWith('/api/')) return sendJson(res, 401, { error: 'Login admin dulu' });
+    return res.redirect('/login-admin');
   }
   next();
 }
 
 // ---- halaman ----
-app.get('/admin', requireAdmin, (req, res) => {
-  res.sendFile(path.join(VIEWS_DIR, 'admin.html'));
+app.get('/admin', (req, res) => {
+  if (req.session && req.session.role === 'admin') {
+    return res.sendFile(path.join(VIEWS_DIR, 'admin.html'));
+  }
+  res.redirect('/login-admin'); // Ruling: admin tdk login → login-admin (bukan /pegawai)
+});
+
+app.get('/login-admin', (req, res) => {
+  if (req.session && req.session.role === 'admin') return res.redirect('/admin');
+  res.sendFile(path.join(VIEWS_DIR, 'login-admin.html'));
+});
+
+app.post('/login-admin', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || typeof password !== 'string' || password === '') {
+    return sendJson(res, 400, { error: 'Username dan password wajib diisi' });
+  }
+  const [rows] = await db.query('SELECT id, username, password_hash, role FROM `users` WHERE `username` = ? AND `role` = ? LIMIT 1', [username, 'admin']);
+  const u = rows[0];
+  if (!u || !verifyPassword(password, u.password_hash)) {
+    return sendJson(res, 401, { error: 'Username atau password salah' });
+  }
+  req.session.user_id = u.id;
+  req.session.username = u.username;
+  req.session.role = u.role;
+  res.json({ ok: true, role: u.role });
+});
+
+// ---- manajemen user (admin) ----
+app.get('/api/users', requireAdmin, async (req, res) => {
+  const [rows] = await db.query('SELECT id, username, role, created_at FROM users ORDER BY id');
+  res.json(rows);
+});
+
+app.post('/api/users/tambah', requireAdmin, async (req, res) => {
+  const { username, password, role = 'admin' } = req.body || {};
+  if (!username || String(username).trim() === '') return sendJson(res, 400, { error: 'Username wajib diisi' });
+  if (!password) return sendJson(res, 400, { error: 'Password wajib diisi' });
+  if (!['admin', 'pegawai'].includes(role)) return sendJson(res, 400, { error: 'Role tidak valid' });
+  const [r] = await db.query('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hashPassword(password), role]);
+  res.json({ ok: true, id: r.insertId });
+});
+
+app.post('/api/users/edit/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const [exists] = await db.query('SELECT id FROM users WHERE id = ?', [id]);
+  if (!exists.length) return sendJson(res, 404, { error: 'User tidak ditemukan' });
+  const { username, password, role = 'admin' } = req.body || {};
+  const sets = [], vals = [];
+  if (username) { sets.push('username = ?'); vals.push(username); }
+  if (password) { sets.push('password_hash = ?'); vals.push(hashPassword(password)); }
+  if (role && ['admin', 'pegawai'].includes(role)) { sets.push('role = ?'); vals.push(role); }
+  if (sets.length) {
+    vals.push(id);
+    await db.query('UPDATE users SET ' + sets.join(', ') + ' WHERE id = ?', vals);
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/users/hapus/:id', requireAdmin, async (req, res) => {
+  await db.query('DELETE FROM users WHERE id = ?', [Number(req.params.id)]);
+  res.json({ ok: true });
 });
 app.get('/pegawai', (req, res) => {
   if (req.session && req.session.user_id) {
