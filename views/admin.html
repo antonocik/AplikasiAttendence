@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Absensi - Admin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/adminlte@4/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand bg-white border-bottom shadow-sm px-4">
+    <a class="navbar-brand fw-bold text-primary" href="/admin">Absensi Admin</a>
+    <div class="ms-auto">
+      <a class="btn btn-outline-danger btn-sm" href="/logout">Logout</a>
+    </div>
+  </nav>
+
+  <div class="container py-4">
+    <!-- Ringkasanbulan -->
+    <section class="mb-4">
+      <h3 class="mb-3 fw-bold">Ringkasan Bulan Ini</h3>
+      <div class="row" id="ringkasan"></div>
+    </section>
+
+    <!-- Pegawai: daftar + CRUD -->
+    <section class="card shadow mb-4">
+      <div class="card-header bg-primary text-white"><h5 class="mb-0">Daftar Pegawai</h5></div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover" id="tabelPegawai">
+            <thead><tr><th>ID</th><th>Nama</th><th>NIP</th><th>Departemen</th><th>Aktif</th><th>Aksi</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer">
+        <form class="row g-2 align-items-end" id="formTambah" onsubmit="return false;">
+          <div class="col-md-3"><input type="text" class="form-control" id="namaTambah" placeholder="Nama lengkap"></div>
+          <div class="col-md-2"><input type="text" class="form-control" id="nipTambah" placeholder="NIP"></div>
+          <div class="col-md-3"><input type="text" class="form-control" id="deptTambah" placeholder="Departemen"></div>
+          <div class="col-auto"><button type="submit" class="btn btn-primary">Tambah</button></div>
+        </form>
+        <hr class="my-3">
+        <form class="row g-2 align-items-end" id="formEdit" style="display:none;" onsubmit="return false;">
+          <input type="hidden" id="editId">
+          <div class="col-md-3"><input type="text" class="form-control" id="namaEdit" placeholder="Nama lengkap"></div>
+          <div class="col-md-2"><input type="text" class="form-control" id="nipEdit" placeholder="NIP"></div>
+          <div class="col-md-3"><input type="text" class="form-control" id="deptEdit" placeholder="Departemen"></div>
+          <div class="col-auto"><button type="submit" class="btn btn-success">Simpan Edit</button><button type="button" class="btn btn-secondary" id="batalEdit">Batal</button></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Rekap absen -->
+    <section class="card shadow">
+      <div class="card-header bg-primary text-white"><h5 class="mb-0">Rekap Absen</h5></div>
+      <div class="card-body">
+        <form class="row g-2 align-items-end mb-3" id="formRekap" onsubmit="return false;">
+          <div class="col-md-3"><input type="date" class="form-control" id="dari"></div>
+          <div class="col-md-3"><input type="date" class="form-control" id="sampai"></div>
+          <div class="col-md-3"><select class="form-select" id="pegawaiFilter"><option value="">Semua pegawai</option></select></div>
+          <div class="col-auto"><button type="submit" class="btn btn-primary">Muat Rekap</button>
+            <a class="btn btn-outline-primary" id="exportLink" href="javascript:void(0)">Export CSV</a></div>
+        </form>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover" id="tabelRekap">
+            <thead><tr><th>Pegawai</th><th>Tanggal</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Status</th><th>Terlambat(min)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    async function api(url, opts = {}) {
+      const res = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }, opts));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data.error || data.message || 'Gagal ' + res.status));
+      return data;
+    }
+    function setDariSampaiBulanIni() {
+      const now = new Date();
+      const tahun = String(now.getFullYear()).padStart(4, '0');
+      const bulan = String(now.getMonth() + 1).padStart(2, '0');
+      const dari = now.getDate() - (now.getDate() - 1); // bulan ini dari tanggal 1
+      const sampai = tahun + '-' + bulan + '-' + String(now.getDate()).padStart(2, '0');
+      document.getElementById('dari').value = tahun + '-' + bulan + '-01';
+      document.getElementById('sampai').value = sampai;
+    }
+
+    async function loadRingkasan() {
+      const now = new Date();
+      const dari = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+      const sampai = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const data = await api('/api/ringkasan?dari=' + dari + '&sampai=' + sampai);
+      const tbl = document.getElementById('ringkasan');
+      tbl.innerHTML = data.items.map(i => `
+        <div class="col-md-3"><div class="card shadow-sm p-3"><small class="text-muted">${i.label}</small><div class="h4 fw-bold">${i.jumlah}</div></div></div>`).join('');
+      await loadPegawai();
+    }
+
+    async function loadPegawai() {
+      const data = await api('/api/pegawai');
+      const tbody = document.querySelector('#tabelPegawai tbody');
+      const filter = document.getElementById('pegawaiFilter');
+      tbody.innerHTML = data.map(p => `<tr>
+        <td>${p.id}</td><td>${p.nama_lengkap}</td><td>${p.nip || ''}</td><td>${p.departemen || ''}</td>
+        <td>${p.status_aktif ? 'Aktif' : 'Tidak Aktif'}</td>
+        <td><button class="btn btn-sm btn-outline-warning editBtn" data-id="${p.id}">Edit</button>
+            <button class="btn btn-sm btn-outline-danger hapusBtn" data-id="${p.id}">Hapus</button></td></tr>`).join('');
+      filter.innerHTML = '<option value="">Semua pegawai</option>' + data.map(p => `<option value="${p.id}">${p.nama_lengkap} (${p.id})</option>`).join('');
+    }
+
+    function onTambah(e) {
+      const data = new URLSearchParams({ nama: document.getElementById('namaTambah').value, nip: document.getElementById('nipTambah').value, departemen: document.getElementById('deptTambah').value });
+      api('/api/pegawai/tambah', { method: 'POST', body: data.toString(), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }).then(() => { document.getElementById('formTambah').reset(); loadPegawai(); });
+    }
+    async function onEdit(e) {
+      const id = e.target.dataset.id;
+      const row = e.target.closest('tr');
+      const cells = row.querySelectorAll('td');
+      document.getElementById('editId').value = id;
+      document.getElementById('namaEdit').value = cells[1].textContent;
+      document.getElementById('nipEdit').value = cells[2].textContent;
+      document.getElementById('deptEdit').value = cells[3].textContent;
+      document.getElementById('formEdit').style.display = '';
+      document.getElementById('batalEdit').onclick = () => { document.getElementById('formEdit').style.display = 'none'; };
+    }
+    async function simpanEdit(e) {
+      e.preventDefault();
+      const id = document.getElementById('editId').value;
+      await api('/api/pegawai/edit/' + id, { method: 'POST', body: new URLSearchParams({
+        nama_lengkap: document.getElementById('namaEdit').value,
+        nip: document.getElementById('nipEdit').value,
+        departemen: document.getElementById('deptEdit').value,
+      }) });
+      document.getElementById('formEdit').style.display = 'none';
+      await loadPegawai();
+    }
+    document.getElementById('formEdit').addEventListener('submit', simpanEdit);
+    async function onHapus(id) { if (confirm('Hapus pegawai ini?')) await api('/api/pegawai/hapus/' + id, { method: 'POST' }); loadPegawai(); }
+
+    async function loadRekap() {
+      const q = new URLSearchParams({ dari: document.getElementById('dari').value, sampai: document.getElementById('sampai').value, pegawai_id: document.getElementById('pegawaiFilter').value });
+      const data = await api('/api/rekap?' + q.toString());
+      const tbody = document.querySelector('#tabelRekap tbody');
+      tbody.innerHTML = data.map(r => `<tr><td>${r.nama_lengkap || '-'}</td><td>${r.tanggal}</td><td>${r.jam_masuk || '-'}</td><td>${r.jam_pulang || '-'}</td><td>${badgeStatus(r.status)}</td><td>${r.menit_terlambat || 0}</td></tr>`).join('');
+    }
+    function badgeStatus(s) { const map = { hadir: 'primary', izin: 'warning', alpa: 'danger', terlambat: 'info' }; return `<span class="badge bg-${map[s] || 'secondary'}">${s}</span>`; }
+
+    function updateExport() {
+      const q = new URLSearchParams({ dari: document.getElementById('dari').value, sampai: document.getElementById('sampai').value });
+      document.getElementById('exportLink').href = '/api/export?' + q.toString();
+    }
+
+    document.getElementById('formTambah').addEventListener('submit', onTambah);
+    document.getElementById('formRekap').addEventListener('submit', loadRekap);
+    document.getElementById('dari').addEventListener('change', updateExport);
+    document.getElementById('sampai').addEventListener('change', updateExport);
+    document.querySelector('#tabelPegawai').addEventListener('click', (e) => {
+      const row = e.target.closest('tr');
+      if (e.target.classList.contains('hapusBtn')) onHapus(e.target.dataset.id);
+      else if (e.target.classList.contains('editBtn')) onEdit(e);
+    });
+    setDariSampaiBulanIni();
+    loadRingkasan();
+  </script>
+</body>
+</html>
